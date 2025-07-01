@@ -1,0 +1,200 @@
+#include <iostream>
+#include <stack>
+#include <string>
+using namespace std;
+
+// Data barang
+struct Barang {
+    string id;
+    string nama;
+    int jumlah;
+    string kategori;
+};
+
+// Struktur pohon biner
+struct Simpul {
+    Barang isi;
+    Simpul* kiri;
+    Simpul* kanan;
+};
+
+// Catatan perubahan
+struct Histori {
+    string tipe; // "sisip" atau "hapus"
+    Barang data;
+};
+
+stack<Histori> catatanUndo;
+
+// Membuat simpul baru
+Simpul* buatSimpulBaru(Barang b) {
+    Simpul* s = new Simpul;
+    s->isi = b;
+    s->kiri = s->kanan = nullptr;
+    return s;
+}
+
+// Menambahkan barang
+Simpul* sisipBarang(Simpul* akar, Barang b) {
+    if (!akar) {
+        catatanUndo.push({"sisip", b});
+        return buatSimpulBaru(b);
+    }
+    if (b.id < akar->isi.id)
+        akar->kiri = sisipBarang(akar->kiri, b);
+    else if (b.id > akar->isi.id)
+        akar->kanan = sisipBarang(akar->kanan, b);
+    else
+        cout << "ID sudah digunakan.\n";
+    return akar;
+}
+
+// Tampilkan semua (in-order)
+void tampilSemua(Simpul* akar) {
+    if (!akar) return;
+    tampilSemua(akar->kiri);
+    cout << "ID: " << akar->isi.id
+         << ", Nama: " << akar->isi.nama
+         << ", Jumlah: " << akar->isi.jumlah
+         << ", Kategori: " << akar->isi.kategori << endl;
+    tampilSemua(akar->kanan);
+}
+
+// Tampilkan sesuai kategori
+void tampilKategori(Simpul* akar, string kategori) {
+    if (!akar) return;
+    tampilKategori(akar->kiri, kategori);
+    if (akar->isi.kategori == kategori)
+        cout << "ID: " << akar->isi.id
+             << ", Nama: " << akar->isi.nama
+             << ", Jumlah: " << akar->isi.jumlah << endl;
+    tampilKategori(akar->kanan, kategori);
+}
+
+// Menghapus barang
+Simpul* hapusBarang(Simpul* akar, string id, bool& ketemu, Barang& terhapus) {
+    if (!akar) return nullptr;
+
+    if (id < akar->isi.id) {
+        akar->kiri = hapusBarang(akar->kiri, id, ketemu, terhapus);
+    } else if (id > akar->isi.id) {
+        akar->kanan = hapusBarang(akar->kanan, id, ketemu, terhapus);
+    } else {
+        ketemu = true;
+        terhapus = akar->isi;
+        if (!akar->kiri && !akar->kanan) {
+            delete akar;
+            return nullptr;
+        } else if (!akar->kiri) {
+            Simpul* temp = akar->kanan;
+            delete akar;
+            return temp;
+        } else if (!akar->kanan) {
+            Simpul* temp = akar->kiri;
+            delete akar;
+            return temp;
+        } else {
+            Simpul* pengganti = akar->kanan;
+            while (pengganti->kiri)
+                pengganti = pengganti->kiri;
+            akar->isi = pengganti->isi;
+            akar->kanan = hapusBarang(akar->kanan, pengganti->isi.id, ketemu, terhapus);
+        }
+    }
+    return akar;
+}
+
+// Undo aksi terakhir
+Simpul* batalkan(Simpul* akar) {
+    if (catatanUndo.empty()) {
+        cout << "Tidak ada perubahan untuk dibatalkan.\n";
+        return akar;
+    }
+
+    Histori h = catatanUndo.top();
+    catatanUndo.pop();
+
+    if (h.tipe == "sisip") {
+        bool ditemukan = false;
+        Barang dummy;
+        akar = hapusBarang(akar, h.data.id, ditemukan, dummy);
+        if (ditemukan) cout << "Barang hasil sisip dibatalkan.\n";
+    } else if (h.tipe == "hapus") {
+        akar = sisipBarang(akar, h.data);
+        cout << "Barang yang dihapus dikembalikan.\n";
+        if (!catatanUndo.empty()) catatanUndo.pop(); // hapus log sisip otomatis
+    }
+
+    return akar;
+}
+
+// Tampilan menu
+void tampilMenu() {
+    cout << "\n=== Sistem Gudang Barang ===\n";
+    cout << "1. Tambah Barang\n";
+    cout << "2. Lihat Semua Barang\n";
+    cout << "3. Cari Berdasarkan Kategori\n";
+    cout << "4. Hapus Barang\n";
+    cout << "5. Undo Perubahan\n";
+    cout << "0. Keluar\n";
+    cout << "Pilihan: ";
+}
+
+int main() {
+    Simpul* akar = nullptr;
+    int pilihan;
+    do {
+        tampilMenu();
+        cin >> pilihan;
+        cin.ignore();
+
+        if (pilihan == 1) {
+            Barang b;
+            cout << "ID Barang: ";
+            getline(cin, b.id);
+            cout << "Nama Barang: ";
+            getline(cin, b.nama);
+            cout << "Jumlah Stok: ";
+            cin >> b.jumlah;
+            cin.ignore();
+            cout << "Kategori: ";
+            getline(cin, b.kategori);
+            akar = sisipBarang(akar, b);
+        }
+        else if (pilihan == 2) {
+            tampilSemua(akar);
+        }
+        else if (pilihan == 3) {
+            string kategori;
+            cout << "Masukkan Kategori: ";
+            getline(cin, kategori);
+            tampilKategori(akar, kategori);
+        }
+        else if (pilihan == 4) {
+            string id;
+            cout << "ID Barang yang akan dihapus: ";
+            getline(cin, id);
+            bool ditemukan = false;
+            Barang yangTerhapus;
+            akar = hapusBarang(akar, id, ditemukan, yangTerhapus);
+            if (ditemukan) {
+                catatanUndo.push({"hapus", yangTerhapus});
+                cout << "Barang berhasil dihapus.\n";
+            } else {
+                cout << "Barang tidak ditemukan.\n";
+            }
+        }
+        else if (pilihan == 5) {
+            akar = batalkan(akar);
+        }
+        else if (pilihan == 0) {
+            cout << "Program selesai. Terima kasih!\n";
+        }
+        else {
+            cout << "Pilihan tidak valid.\n";
+        }
+
+    } while (pilihan != 0);
+
+    return 0;
+}
